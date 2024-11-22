@@ -59,10 +59,20 @@ extension Task where Failure == Never {
   /// Equivalent to wrapping a call to `Task.value` in `withTaskCancellationHandler`.
   public var cancellableValue: Success {
     get async {
-      await withTaskCancellationHandler {
-        await self.value
-      } onCancel: {
-        self.cancel()
+      if !isExactlyiOS180() {
+        // iOS 18.0 이 아님
+        return await withTaskCancellationHandler {
+          await self.value
+        } onCancel: {
+          self.cancel()
+        }
+      } else {
+        // 정확히 iOS 18.0 임
+        if self.isCancelled {
+          self.cancel()
+          fatalError("Task was cancelled.")
+        }
+        return await self.value
       }
     }
   }
@@ -74,11 +84,37 @@ extension Task where Failure == Error {
   /// Equivalent to wrapping a call to `Task.value` in `withTaskCancellationHandler`.
   public var cancellableValue: Success {
     get async throws {
-      try await withTaskCancellationHandler {
-        try await self.value
-      } onCancel: {
-        self.cancel()
+      if !isExactlyiOS180() {
+        // iOS 18.0 이 아님
+        return try await withTaskCancellationHandler {
+          try await self.value
+        } onCancel: {
+          self.cancel()
+        }
+      } else {
+        // 정확히 iOS 18.0 임
+        if self.isCancelled {
+          self.cancel()
+          throw NSError(domain: "TaskCancelled", code: -999, userInfo: nil)
+        }
+        return try await self.value
       }
     }
+  }
+}
+
+private func isExactlyiOS180() -> Bool {
+  if #available(iOS 18.0, *) {
+    let osVersion = ProcessInfo.processInfo.operatingSystemVersion
+    if osVersion.majorVersion == 18 && osVersion.minorVersion == 0 {
+      // 정확히 iOS 18.0
+      return true
+    } else {
+      // iOS 18.0 이상 (18.0 초과)
+      return false
+    }
+  } else {
+    // iOS 18.0 미만
+    return false
   }
 }
